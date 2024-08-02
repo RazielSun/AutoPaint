@@ -32,6 +32,12 @@ public:
 	// UPROPERTY(EditAnywhere, Category = AutoPaint, AdvancedDisplay)
 	// bool bExclusiveRadius = false;
 
+	UPROPERTY(EditAnywhere, Category = AutoPaint)
+	bool bAffectHeightmap = true;
+
+	UPROPERTY(EditAnywhere, Category = AutoPaint)
+	TArray<FName> AffectWeightmap;
+
 	/**
 	 * Gets the transform from patch to world. The transform is based off of the component
 	 * transform, but with rotation changed to align to the landscape, only using the yaw
@@ -51,10 +57,14 @@ protected:
 
 	virtual UTextureRenderTarget2D* RenderLayer_Native(const FLandscapeBrushParameters& InParameters) override;
 
+	UTextureRenderTarget2D* ApplyToHeightmap(UTextureRenderTarget2D* InCombinedResult);
+	UTextureRenderTarget2D* ApplyToWeightmap(UTextureRenderTarget2D* InCombinedResult);
+
 	void GetCommonShaderParams(const FIntPoint& SourceResolutionIn, const FIntPoint& DestinationResolutionIn, 
 		FTransform& PatchToWorldOut, FVector2f& PatchWorldDimensionsOut, FMatrix44f& HeightmapToPatchOut, 
 		FIntRect& DestinationBoundsOut, FVector2f& EdgeUVDeadBorderOut, float& FalloffWorldMarginOut) const;
 
+	virtual bool AffectsWeightmapLayer(const FName& InLayerName) const override;
 	virtual bool AffectsVisibilityLayer() const override { return false; }
 
 };

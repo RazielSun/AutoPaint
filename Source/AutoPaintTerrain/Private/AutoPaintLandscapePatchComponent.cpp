@@ -3,7 +3,7 @@
 
 #include "AutoPaintLandscapePatchComponent.h"
 
-#include "AutoPaintCircleHeightPatchPS.h"
+// #include "AutoPaintCircleHeightPatchPS.h" // DEBUG
 #include "AutoPaintTexturePatchPS.h"
 #include "LandscapePatchManager.h"
 #include "AutoPaintData.h"
@@ -24,11 +24,59 @@ UTextureRenderTarget2D* UAutoPaintLandscapePatchComponent::RenderLayer_Native(co
 		return InParameters.CombinedResult;
 	}
 
-	// Circle height patch doesn't affect regular weightmap layers.
-	if (InParameters.LayerType != ELandscapeToolTargetType::Heightmap)
+	const bool bIsHeightmapTarget = InParameters.LayerType == ELandscapeToolTargetType::Heightmap && bAffectHeightmap;
+	const bool bIsWeightmapTarget = InParameters.LayerType == ELandscapeToolTargetType::Weightmap;
+	const bool bIsVisibilityLayerTarget = InParameters.LayerType == ELandscapeToolTargetType::Visibility;
+
+	if (bIsHeightmapTarget)
 	{
-		return InParameters.CombinedResult;
+		// @todo: Reinitilize?
+
+		return ApplyToHeightmap(InParameters.CombinedResult);
 	}
+	else
+	{
+		// Try to find the weight patch
+		// ULandscapeWeightPatchTextureInfo* WeightPatchInfo = nullptr;
+
+		bool bFoundWeightmap = false;
+		for (const auto WeightmapLayerName : AffectWeightmap)
+		{
+			if (bIsWeightmapTarget && (WeightmapLayerName == InParameters.WeightmapLayerName))
+			{
+				bFoundWeightmap = true;
+				// WeightPatchInfo = WeightPatchEntry;
+				break;
+			}
+		}
+
+		// if (!WeightPatchInfo)
+		if (!bFoundWeightmap)
+		{
+			return InParameters.CombinedResult;
+		}
+		
+		// @todo: Reinitialize ?
+		// if (WeightPatchInfo->bReinitializeOnNextRender)
+		// {
+		// 	WeightPatchInfo->bReinitializeOnNextRender = false;
+		// 	ReinitializeWeightPatch(WeightPatchInfo, InParameters.CombinedResult);
+		// 	return InParameters.CombinedResult;
+		// }
+		// else
+		{
+			return ApplyToWeightmap(InParameters.CombinedResult);
+		}
+	}
+}
+
+UTextureRenderTarget2D* UAutoPaintLandscapePatchComponent::ApplyToHeightmap(UTextureRenderTarget2D* InCombinedResult)
+{
+	// // Circle height patch doesn't affect regular weightmap layers.
+	// if (InParameters.LayerType != ELandscapeToolTargetType::Heightmap)
+	// {
+	// 	return InParameters.CombinedResult;
+	// }
 
 	// DEBUG ONLY
 	// FTransform HeightmapCoordsToWorld = PatchManager->GetHeightmapCoordsToWorld();
@@ -46,27 +94,27 @@ UTextureRenderTarget2D* UAutoPaintLandscapePatchComponent::RenderLayer_Native(co
 
 	if (!Asset)
 	{
-		return InParameters.CombinedResult;
+		return InCombinedResult;
 	}
 
 	UTexture* PatchUObject = Asset->TextureAsset;
 	if (!IsValid(PatchUObject))
 	{
-		return InParameters.CombinedResult;
+		return InCombinedResult;
 	}
 
 	FTextureResource* Patch = PatchUObject->GetResource();
 	if (!Patch)
 	{
-		return InParameters.CombinedResult;
+		return InCombinedResult;
 	}
 
 	FAutoPaintTexturePatchDispatchParams Params;
-	Params.CombinedResult = InParameters.CombinedResult;
+	Params.CombinedResult = InCombinedResult;
 	Params.PatchTexture = PatchUObject;
 
 	FIntPoint SourceResolutionIn = FIntPoint(Patch->GetSizeX(), Patch->GetSizeY());
-	FIntPoint DestinationResolutionIn = FIntPoint(InParameters.CombinedResult->SizeX, InParameters.CombinedResult->SizeY);
+	FIntPoint DestinationResolutionIn = FIntPoint(InCombinedResult->SizeX, InCombinedResult->SizeY);
 	
 	FTransform PatchToWorld;
 	GetCommonShaderParams(SourceResolutionIn, DestinationResolutionIn,
@@ -91,6 +139,9 @@ UTextureRenderTarget2D* UAutoPaintLandscapePatchComponent::RenderLayer_Native(co
 	
 	Params.HeightScale = bNativeEncoding ? 1 : LANDSCAPE_INV_ZSCALE * WorldSpaceEncodingScale / LandscapeHeightScale;
 
+	// @todo:
+	Params.HeightScale *= Asset->HeightWPO;
+
 	/**
 	 * Whether to apply the patch Z scale to the height stored in the patch.
 	 */
@@ -110,7 +161,7 @@ UTextureRenderTarget2D* UAutoPaintLandscapePatchComponent::RenderLayer_Native(co
 	// 	break; // no offset necessary
 	// case ELandscapeTextureHeightPatchZeroHeightMeaning::PatchZ:
 	{
-		FVector3d Location = PatchToWorld.GetTranslation() + FVector3d::UpVector * Asset->HeightWPO;
+		FVector3d Location = PatchToWorld.GetTranslation();
 		FVector3d PatchOriginInHeightmapCoords = PatchManager->GetHeightmapCoordsToWorld().InverseTransformPosition(Location);
 		Params.HeightOffset = PatchOriginInHeightmapCoords.Z - LandscapeDataAccess::MidValue;
 	// 	break;
@@ -125,14 +176,61 @@ UTextureRenderTarget2D* UAutoPaintLandscapePatchComponent::RenderLayer_Native(co
 	// 	ensure(false);
 	// }
 
-	FAutoPaintTexturePatchGPUInterface::Dispatch(Params);
+	FAutoPaintTexturePatchHeightmapGPUInterface::Dispatch(Params);
 
-	return InParameters.CombinedResult;
+	return InCombinedResult;
+}
+
+UTextureRenderTarget2D* UAutoPaintLandscapePatchComponent::ApplyToWeightmap(UTextureRenderTarget2D* InCombinedResult)
+{
+	if (!Asset)
+	{
+		return InCombinedResult;
+	}
+
+	UTexture* PatchUObject = Asset->TextureAsset;
+	if (!IsValid(PatchUObject))
+	{
+		return InCombinedResult;
+	}
+
+	FTextureResource* Patch = PatchUObject->GetResource();
+	if (!Patch)
+	{
+		return InCombinedResult;
+	}
+
+	FAutoPaintTexturePatchDispatchParams Params;
+	Params.CombinedResult = InCombinedResult;
+	Params.PatchTexture = PatchUObject;
+
+	FIntPoint SourceResolutionIn = FIntPoint(Patch->GetSizeX(), Patch->GetSizeY());
+	FIntPoint DestinationResolutionIn = FIntPoint(InCombinedResult->SizeX, InCombinedResult->SizeY);
+	
+	FTransform PatchToWorld;
+	GetCommonShaderParams(SourceResolutionIn, DestinationResolutionIn,
+		PatchToWorld, Params.PatchWorldDimensions, Params.HeightmapToPatch, 
+		Params.DestinationBounds, Params.EdgeUVDeadBorder, Params.FalloffWorldMargin);
+
+	if (Params.DestinationBounds.IsEmpty())
+	{
+		// Patch must be outside the landscape.
+		return InCombinedResult;
+	}
+
+	FAutoPaintTexturePatchWeightmapGPUInterface::Dispatch(Params);
+	
+	return InCombinedResult;
 }
 
 FTransform UAutoPaintLandscapePatchComponent::GetPatchToWorldTransform() const
 {
 	FTransform PatchToWorld = GetComponentTransform();
+
+	if (Asset)
+	{
+		PatchToWorld.AddToTranslation(-Asset->WorldOffset);
+	}
 
 	if (Landscape.IsValid())
 	{
@@ -212,10 +310,19 @@ void UAutoPaintLandscapePatchComponent::GetCommonShaderParams(const FIntPoint& S
 	}
 
 	FVector3d ComponentScale = PatchToWorldOut.GetScale3D();
-
-	/**
-	 * Distance (in unscaled world coordinates) across which to smoothly fall off the patch effects.
-	 */
-	float Falloff = 0;
+	
+	const float Falloff = (Asset) ? Asset->Falloff : 0.f;
 	FalloffWorldMarginOut = Falloff / FMath::Min(ComponentScale.X, ComponentScale.Y);
+}
+
+bool UAutoPaintLandscapePatchComponent::AffectsWeightmapLayer(const FName& InLayerName) const
+{
+	for (const auto WeightmapLayerName : AffectWeightmap)
+	{
+		if (WeightmapLayerName == InLayerName)
+		{
+			return true;
+		}
+	}
+	return false;
 }

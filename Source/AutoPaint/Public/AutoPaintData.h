@@ -40,9 +40,18 @@ public:
 	// Size in cm for Texture/Preview
 	UPROPERTY(EditAnywhere, Category = Default)
 	FVector2D TextureWorldSize = FVector2D(300.0);
+
+	UPROPERTY(EditAnywhere, Category = Default)
+	FVector WorldOffset = FVector::ZeroVector;
 	
 	UPROPERTY(EditAnywhere, Category = Capture)
 	FIntPoint SceneCaptureResolution = FIntPoint(32, 32);
+
+	/**
+	 * Distance (in unscaled world coordinates) across which to smoothly fall off the patch effects.
+	 */
+	UPROPERTY(EditAnywhere, Category = Render, meta = (ClampMin = "0", UIMax = "2000"))
+	float Falloff = 100;
 
 	// In cm
 	UPROPERTY(EditAnywhere, Category = Render)

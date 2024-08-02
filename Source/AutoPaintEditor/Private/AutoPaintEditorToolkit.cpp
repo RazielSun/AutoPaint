@@ -203,7 +203,7 @@ void FAutoPaintEditorToolkit::RegisterTabs(TArray<FTab>& OutTabs) const
 
 UStaticMesh* FAutoPaintEditorToolkit::GetEditAssetStaticMesh() const
 {
-	return EditAsset ? EditAsset->ReferencedStaticMesh.Get() : nullptr;
+	return EditAsset ? EditAsset->ReferencedStaticMesh.LoadSynchronous() : nullptr;
 }
 
 UMeshComponent* FAutoPaintEditorToolkit::GetPreviewMeshComponent() const
@@ -222,7 +222,8 @@ void FAutoPaintEditorToolkit::UpdatePreviewMeshComponent()
 		
 		if (EditAsset)
 		{
-			PreviewMeshComponent->SetStaticMesh(EditAsset->ReferencedStaticMesh.Get());
+			PreviewMeshComponent->SetStaticMesh(GetEditAssetStaticMesh());
+			PreviewMeshComponent->SetRelativeLocation(EditAsset->WorldOffset);
 		}
 	}
 }
@@ -348,6 +349,7 @@ FBoxSphereBounds FAutoPaintEditorToolkit::GetComponentsBounds() const
 void FAutoPaintEditorToolkit::Capture()
 {
 	UpdateRenderTargets();
+	UpdatePreviewMeshComponent();
 	UpdateCameraComponent();
 	UpdateFloorMeshComponent();
 	

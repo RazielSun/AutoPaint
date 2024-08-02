@@ -20,7 +20,17 @@ struct AUTOPAINTSHADERS_API FAutoPaintTexturePatchDispatchParams
 	float HeightOffset;
 };
 
-class AUTOPAINTSHADERS_API FAutoPaintTexturePatchGPUInterface
+class AUTOPAINTSHADERS_API FAutoPaintTexturePatchHeightmapGPUInterface
+{
+public:
+	static void Dispatch_RenderThread(FRHICommandListImmediate& RHICmdList, const FAutoPaintTexturePatchDispatchParams& Params);
+	static void Dispatch_GameThread(const FAutoPaintTexturePatchDispatchParams& Params);
+
+	/** Dispatches the texture readback compute shader. Can be called from any thread. */
+	static void Dispatch(const FAutoPaintTexturePatchDispatchParams& Params);
+};
+
+class AUTOPAINTSHADERS_API FAutoPaintTexturePatchWeightmapGPUInterface
 {
 public:
 	static void Dispatch_RenderThread(FRHICommandListImmediate& RHICmdList, const FAutoPaintTexturePatchDispatchParams& Params);
